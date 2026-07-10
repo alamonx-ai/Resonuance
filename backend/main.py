@@ -2,6 +2,10 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from typing import List, Dict
 import json
+# --- AJOUTS POUR MONGODB & DATES ---
+from motor.motor_asyncio import AsyncIOMotorClient
+from datetime import datetime
+import os
 
 app = FastAPI()
 
@@ -13,6 +17,21 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# --- INITIALISATION MONGODB ---
+# Python va chercher la variable secrète "MONGO_URI" configurée sur Render
+MONGO_DETAILS = os.environ.get("MONGO_URI")
+
+if not MONGO_DETAILS:
+    print("⚠️ Configuration manquante : MONGO_URI n'est pas définie dans l'environnement.")
+    # Option de secours locale si tu testes un jour sur PC, sinon Render lèvera une alerte
+    MONGO_DETAILS = "mongodb://localhost:27017"
+
+client = AsyncIOMotorClient(MONGO_DETAILS)
+db = client.resonuance  # Nom de ta base de données sur Atlas
+messages_collection = db.get_collection("messages")  # Collection pour l'historique des chats
+users_collection = db.get_collection("users")        # Collection pour les profils Big Five
+# ------------------------------
 
 # Structure pour stocker les connexions actives des utilisateurs
 class ConnectionManager:
@@ -41,7 +60,7 @@ manager = ConnectionManager()
 
 @app.get("/")
 def read_root():
-    return {"status": "Résonuance Backend en ligne !"}
+    return {"status": "Résonuance Backend en ligne et connecté à MongoDB !"}
 
 # Route WebSocket pour le chat en temps réel
 @app.websocket("/ws/{user_id}")
@@ -61,9 +80,16 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
             # Pour l'instant, on prépare la réponse
             response = {
                 "sender_id": user_id,
+                "recipient_id": recipient_id,
                 "text": text,
-                "vibe": "Neutre" # Ce paramètre changera selon la nuance détectée
+                "vibe": "Neutre", # Ce paramètre changera selon la nuance détectée
+                "timestamp": datetime.utcnow().isoformat() # Ajoute l'heure exacte au format texte standard
             }
+
+            # --- SAUVEGARDE DANS MONGODB ---
+            # .copy() évite que MongoDB modifie notre dictionnaire en y injectant un objet '_id' incompatible avec JSON
+            await messages_collection.insert_one(response.copy())
+            # -------------------------------
 
             # Envoyer le message au destinataire
             if recipient_id:
