@@ -8,14 +8,27 @@
 </head>
 <body>
 
-    <header>Réson<span>uance</span></header>
+    <!-- ÉCRAN DE CONNEXION INITIAL -->
+    <div id="login-container">
+        <div class="login-box">
+            <h1>Réson<span>uance</span></h1>
+            <p>Entre un pseudo pour rejoindre le chat en direct</p>
+            <input type="text" id="username-input" placeholder="Ton pseudo..." maxlength="15">
+            <button id="login-btn">Rejoindre</button>
+        </div>
+    </div>
 
-    <div id="chat-container"></div>
+    <!-- ÉCRAN DU CHAT (Caché au début) -->
+    <div id="app-container" style="display: none; flex-direction: column; height: 100vh;">
+        <header>Réson<span>uance</span> — Connecté en tant que <span id="current-user-tag" style="color:#333;"></span></header>
 
-    <footer>
-        <input type="text" id="message-input" placeholder="Écris ton message ici...">
-        <button id="send-btn">Envoyer</button>
-    </footer>
+        <div id="chat-container"></div>
+
+        <footer>
+            <input type="text" id="message-input" placeholder="Écris ton message ici...">
+            <button id="send-btn">Envoyer</button>
+        </footer>
+    </div>
 
     <script src="app.js" defer></script>
 </body>

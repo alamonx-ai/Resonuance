@@ -1,82 +1,110 @@
 document.addEventListener("DOMContentLoaded", () => {
     const BACKEND_URL = "resonuance.onrender.com"; 
-    const USER_ID = "User_" + Math.floor(Math.random() * 1000); 
-    
-    let ws;
+    let ws = null;
+    let username = "";
+
+    // Éléments du Login
+    const loginContainer = document.getElementById("login-container");
+    const usernameInput = document.getElementById("username-input");
+    const loginBtn = document.getElementById("login-btn");
+
+    // Éléments du Chat
+    const appContainer = document.getElementById("app-container");
+    const currentUserTag = document.getElementById("current-user-tag");
     const sendBtn = document.getElementById("send-btn");
     const messageInput = document.getElementById("message-input");
     const chatContainer = document.getElementById("chat-container");
 
-    // Fonction pour afficher un message à l'écran
-    function appendMessage(senderId, text, vibe) {
-        const messageDiv = document.createElement("div");
-        messageDiv.classList.add("message");
-
-        if (senderId === USER_ID) {
-            messageDiv.classList.add("sent");
-            messageDiv.innerHTML = `${text} <span class="vibe-tag">${vibe}</span>`;
-        } else {
-            messageDiv.classList.add("received");
-            messageDiv.innerHTML = `<strong>${senderId}:</strong> ${text} <span class="vibe-tag">${vibe}</span>`;
+    // Étape 1 : Gérer l'identification de l'utilisateur
+    loginBtn.addEventListener("click", () => {
+        username = usernameInput.value.trim();
+        if (username === "") {
+            alert("Choisis un pseudo pour te connecter !");
+            return;
         }
 
-        chatContainer.appendChild(messageDiv);
-        chatContainer.scrollTop = chatContainer.scrollHeight;
-    }
+        // Masquer le login et afficher le chat
+        loginContainer.style.display = "none";
+        appContainer.style.display = "flex";
+        currentUserTag.textContent = username;
 
-    // Fonction pour initialiser la connexion WebSocket
-    function connectWebSocket() {
-        ws = new WebSocket(`wss://${BACKEND_URL}/ws/${USER_ID}`);
+        // Lancer la vraie connexion WebSocket avec le pseudo choisi
+        connectToServer(username);
+    });
+
+    usernameInput.addEventListener("keypress", (e) => {
+        if (e.key === "Enter") loginBtn.click();
+    });
+
+    // Étape 2 : Connexion au serveur Python
+    function connectToServer(userId) {
+        ws = new WebSocket(`wss://${BACKEND_URL}/ws/${userId}`);
+
+        ws.onopen = () => {
+            console.log("Connexion établie avec succès !");
+            // Optionnel : Afficher un petit message système local
+            appendSystemMessage("Connexion au serveur Résonuance réussie.");
+        };
 
         ws.onmessage = (event) => {
             const data = JSON.parse(event.data);
-            // Si on reçoit le message du serveur, et que c'est le nôtre, on évite de le doubler
-            // si on l'a déjà affiché en local. Pour l'instant, on laisse le serveur gérer.
-            appendMessage(data.sender_id, data.text, data.vibe);
-        };
+            
+            const messageDiv = document.createElement("div");
+            messageDiv.classList.add("message");
 
-        ws.onopen = () => {
-            console.log("Connecté au serveur de chat Résonuance !");
+            // Si le message vient de nous-mêmes
+            if (data.sender_id === username) {
+                messageDiv.classList.add("sent");
+                messageDiv.innerHTML = `${data.text} <span class="vibe-tag">${data.vibe}</span>`;
+            } else {
+                // Si ça vient d'un autre utilisateur connecté
+                messageDiv.classList.add("received");
+                messageDiv.innerHTML = `<strong>${data.sender_id}:</strong> ${data.text} <span class="vibe-tag">${data.vibe}</span>`;
+            }
+
+            chatContainer.appendChild(messageDiv);
+            chatContainer.scrollTop = chatContainer.scrollHeight;
         };
 
         ws.onerror = (error) => {
-            console.error("Erreur WebSocket :", error);
+            console.error("Erreur de connexion :", error);
+            appendSystemMessage("Erreur : Impossible de joindre le serveur.");
         };
 
         ws.onclose = () => {
-            console.log("Connexion fermée. Tentative de reconnexion dans 5 secondes...");
-            setTimeout(connectWebSocket, 5000); // Reconnexion automatique
+            appendSystemMessage("Déconnecté du serveur. Tentative de reconnexion...");
+            setTimeout(() => connectToServer(username), 4000);
         };
     }
 
-    // Lancer la connexion
-    connectWebSocket();
-
-    // Gestion de l'envoi
+    // Étape 3 : Envoi des messages
     sendBtn.addEventListener("click", () => {
         const text = messageInput.value.trim();
         if (text === "") return;
 
-        // Si le WebSocket est ouvert, on envoie au serveur Python
         if (ws && ws.readyState === WebSocket.OPEN) {
             const payload = {
                 text: text,
-                recipient_id: null
+                recipient_id: null // Salon global
             };
             ws.send(JSON.stringify(payload));
+            messageInput.value = "";
         } else {
-            // MODE SECOURS : Si Render dort ou bug, on affiche quand même le message
-            // pour que tu puisses voir que ton bouton et ton design fonctionnent !
-            console.warn("Serveur déconnecté. Affichage en mode local.");
-            appendMessage(USER_ID, text, "Local (Hors-ligne)");
+            alert("Le chat est hors-ligne pour le moment. Attente du serveur...");
         }
-        
-        messageInput.value = "";
     });
 
     messageInput.addEventListener("keypress", (e) => {
-        if (e.key === "Enter") {
-            sendBtn.click();
-        }
+        if (e.key === "Enter") sendBtn.click();
     });
+
+    function appendSystemMessage(text) {
+        const msg = document.createElement("div");
+        msg.style.textAlignment = "center";
+        msg.style.fontSize = "0.8rem";
+        msg.style.color = "#999";
+        msg.style.margin = "10px 0";
+        msg.textContent = text;
+        chatContainer.appendChild(msg);
+    }
 });
