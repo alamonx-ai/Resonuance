@@ -30,7 +30,6 @@ messages_collection = db.get_collection("messages")
 
 # --- INITIALISATION IA GROQ ---
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
-# Utilisation de AsyncGroq pour ne pas bloquer les WebSockets
 groq_client = AsyncGroq(api_key=GROQ_API_KEY) if GROQ_API_KEY else None
 
 if not groq_client:
@@ -49,7 +48,6 @@ async def analyze_with_ai(text: str) -> dict:
         return fallback
 
     try:
-        # Ajout du await pour l'appel asynchrone
         chat_completion = await groq_client.chat.completions.create(
             messages=[
                 {
@@ -74,7 +72,7 @@ async def analyze_with_ai(text: str) -> dict:
         )
         
         ai_response = chat_completion.choices[0].message.content
-        print(f"Réponse brute de Groq : {ai_response}") # Log de contrôle
+        print(f"Réponse brute de Groq : {ai_response}")
         return json.loads(ai_response)
         
     except Exception as e:
@@ -106,7 +104,8 @@ class ConnectionManager:
         for user_id, connection in list(self.active_connections.items()):
             try:
                 await connection.send_text(message)
-            except Exception:
+            except Exception as e:
+                print(f"Erreur d'envoi à {user_id}, déconnexion automatique.")
                 self.disconnect(user_id)
 
 
@@ -135,12 +134,12 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
             if not text:
                 continue
 
-            # --- APPEL DE LA VRAIE IA (AVEC AWAIT) ---
+            # --- APPEL DE LA VRAIE IA ---
             analysis = await analyze_with_ai(text)
-            # -----------------------------------------
 
             current_time = datetime.utcnow()
 
+            # Sauvegarde MongoDB avec l'objet datetime natif
             db_payload = {
                 "sender_id": user_id,
                 "recipient_id": recipient_id if recipient_id else None,
@@ -154,21 +153,25 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
             except Exception as e:
                 print(f"Erreur MongoDB: {e}")
 
+            # Structure réseau : on force la date en chaîne de caractères ISO
             ws_response = {
                 "sender_id": user_id,
                 "recipient_id": recipient_id if recipient_id else None,
                 "text": text,
                 "analysis": analysis,
-                "timestamp": current_time.isoformat()
+                "timestamp": current_time.isoformat() # <--- CORRIGÉ ICI POUR LE JSON
             }
 
-            message_string = json.dumps(ws_response)
-
-            if recipient_id:
-                await manager.send_personal_message(message_string, recipient_id)
-                await manager.send_personal_message(message_string, user_id)
-            else:
-                await manager.broadcast(message_string)
+            try:
+                message_string = json.dumps(ws_response)
+                
+                if recipient_id:
+                    await manager.send_personal_message(message_string, recipient_id)
+                    await manager.send_personal_message(message_string, user_id)
+                else:
+                    await manager.broadcast(message_string)
+            except Exception as e:
+                print(f"Erreur lors de la sérialisation ou de l'envoi réseau : {e}")
 
     except WebSocketDisconnect:
         manager.disconnect(user_id)
