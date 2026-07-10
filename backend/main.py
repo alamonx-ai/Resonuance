@@ -7,7 +7,7 @@ import json
 from motor.motor_asyncio import AsyncIOMotorClient
 from datetime import datetime
 import os
-from groq import Groq
+from groq import AsyncGroq  # Utilisation du client asynchrone
 
 app = FastAPI()
 
@@ -30,28 +30,33 @@ messages_collection = db.get_collection("messages")
 
 # --- INITIALISATION IA GROQ ---
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
-# Si la clé est manquante en local, on ne bloque pas le démarrage mais on prévient
-groq_client = Groq(api_key=GROQ_API_KEY) if GROQ_API_KEY else None
+# Utilisation de AsyncGroq pour ne pas bloquer les WebSockets
+groq_client = AsyncGroq(api_key=GROQ_API_KEY) if GROQ_API_KEY else None
+
+if not groq_client:
+    print("ATTENTION : GROQ_API_KEY n'est pas détectée par le code !")
+else:
+    print("Groq initialisé avec succès en mode Asynchrone.")
 # ------------------------------
 
 
 # --- MOTEUR D'ANALYSE PAR INTELLIGENCE ARTIFICIELLE ---
-def analyze_with_ai(text: str) -> dict:
-    # Structure de secours si l'IA ne répond pas
+async def analyze_with_ai(text: str) -> dict:
     fallback = {"emotion": "Neutre", "need": "Non identifié", "interpretation": "Analyse indisponible"}
     
     if not groq_client:
+        print("Erreur : groq_client est à None, retour au fallback.")
         return fallback
 
     try:
-        # On demande à Llama 3 d'analyser psychologiquement le message
-        chat_completion = groq_client.chat.completions.create(
+        # Ajout du await pour l'appel asynchrone
+        chat_completion = await groq_client.chat.completions.create(
             messages=[
                 {
                     "role": "system",
                     "content": (
                         "Tu es l'expert psychologue du chat Résonuance. Tu analyses les messages des utilisateurs. "
-                        "Tu dois obligatoirement répondre sous la forme d'un objet JSON pur, sans markdown, sans texte autour. "
+                        "Tu devez obligatoirement répondre sous la forme d'un objet JSON pur, sans markdown, sans texte autour. "
                         "Le JSON doit suivre exactement cette structure : "
                         '{"emotion": "Un seul mot (ex: Joie, Colère, Tristesse, Stress, Excitation, Peur, Neutre)", '
                         '"need": "Le besoin psychologique sous-jacent en une courte phrase (ex: Besoin de reconnaissance, besoin d\'écoute)", '
@@ -63,17 +68,17 @@ def analyze_with_ai(text: str) -> dict:
                     "content": f"Analyse ce message : '{text}'"
                 }
             ],
-            model="llama3-8b-8192", # Modèle ultra rapide et gratuit
-            temperature=0.2, # Basse température pour forcer la stabilité du JSON
-            response_format={"type": "json_object"} # Force le format JSON
+            model="llama3-8b-8192",
+            temperature=0.2,
+            response_format={"type": "json_object"}
         )
         
-        # Récupération et conversion de la réponse de l'IA
         ai_response = chat_completion.choices[0].message.content
+        print(f"Réponse brute de Groq : {ai_response}") # Log de contrôle
         return json.loads(ai_response)
         
     except Exception as e:
-        print(f"Erreur IA Groq : {e}")
+        print(f"Erreur lors de l'appel IA Groq : {e}")
         return fallback
 # ------------------------------------------------------
 
@@ -130,9 +135,9 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
             if not text:
                 continue
 
-            # --- APPEL DE LA VRAIE IA ---
-            analysis = analyze_with_ai(text)
-            # ----------------------------
+            # --- APPEL DE LA VRAIE IA (AVEC AWAIT) ---
+            analysis = await analyze_with_ai(text)
+            # -----------------------------------------
 
             current_time = datetime.utcnow()
 
@@ -140,7 +145,7 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
                 "sender_id": user_id,
                 "recipient_id": recipient_id if recipient_id else None,
                 "text": text,
-                "analysis": analysis, # Contient emotion, need, et interpretation générés par l'IA
+                "analysis": analysis,
                 "timestamp": current_time
             }
 
