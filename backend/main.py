@@ -100,10 +100,8 @@ class ConnectionManager:
             except Exception:
                 self.disconnect(user_id)
 
-    async def broadcast(self, message: str, exclude_user_id: str = None):
+    async def broadcast(self, message: str):
         for user_id, connection in list(self.active_connections.items()):
-            if user_id == exclude_user_id:
-                continue
             try:
                 await connection.send_text(message)
             except Exception as e:
@@ -167,16 +165,12 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
             try:
                 message_string = json.dumps(ws_response)
                 
-                # CORRECTION CRITIQUE : On envoie d'abord la réponse directement à l'expéditeur
-                # pour que son App.js intercepte immédiatement le JSON et remplace "Analyse..."
-                await manager.send_personal_message(message_string, user_id)
-                
                 if recipient_id:
-                    # Message privé
                     await manager.send_personal_message(message_string, recipient_id)
+                    await manager.send_personal_message(message_string, user_id)
                 else:
-                    # Message public : on diffuse aux AUTRES uniquement, car l'expéditeur a déjà reçu sa copie
-                    await manager.broadcast(message_string, exclude_user_id=user_id)
+                    # Envoi global simple sans filtre d'exclusion pour éviter les pertes de paquets locaux
+                    await manager.broadcast(message_string)
                     
             except Exception as e:
                 print(f"Erreur lors de la sérialisation ou de l'envoi réseau : {e}")
