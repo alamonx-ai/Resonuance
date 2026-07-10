@@ -100,8 +100,10 @@ class ConnectionManager:
             except Exception:
                 self.disconnect(user_id)
 
-    async def broadcast(self, message: str):
+    async def broadcast(self, message: str, exclude_user_id: str = None):
         for user_id, connection in list(self.active_connections.items()):
+            if user_id == exclude_user_id:
+                continue
             try:
                 await connection.send_text(message)
             except Exception as e:
@@ -139,7 +141,7 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
 
             current_time = datetime.utcnow()
 
-            # Sauvegarde MongoDB avec l'objet datetime natif
+            # Sauvegarde MongoDB
             db_payload = {
                 "sender_id": user_id,
                 "recipient_id": recipient_id if recipient_id else None,
@@ -153,23 +155,29 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
             except Exception as e:
                 print(f"Erreur MongoDB: {e}")
 
-            # Structure réseau : on force la date en chaîne de caractères ISO
+            # Structure réseau prête
             ws_response = {
                 "sender_id": user_id,
                 "recipient_id": recipient_id if recipient_id else None,
                 "text": text,
                 "analysis": analysis,
-                "timestamp": current_time.isoformat() # <--- CORRIGÉ ICI POUR LE JSON
+                "timestamp": current_time.isoformat()
             }
 
             try:
                 message_string = json.dumps(ws_response)
                 
+                # CORRECTION CRITIQUE : On envoie d'abord la réponse directement à l'expéditeur
+                # pour que son App.js intercepte immédiatement le JSON et remplace "Analyse..."
+                await manager.send_personal_message(message_string, user_id)
+                
                 if recipient_id:
+                    # Message privé
                     await manager.send_personal_message(message_string, recipient_id)
-                    await manager.send_personal_message(message_string, user_id)
                 else:
-                    await manager.broadcast(message_string)
+                    # Message public : on diffuse aux AUTRES uniquement, car l'expéditeur a déjà reçu sa copie
+                    await manager.broadcast(message_string, exclude_user_id=user_id)
+                    
             except Exception as e:
                 print(f"Erreur lors de la sérialisation ou de l'envoi réseau : {e}")
 
