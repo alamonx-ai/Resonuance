@@ -44,14 +44,14 @@ document.addEventListener("DOMContentLoaded", () => {
         };
 
         ws.onmessage = (event) => {
+            console.log("Données brutes reçues du WS :", event.data);
             const data = JSON.parse(event.data);
             const emotion = data.analysis && data.analysis.emotion ? data.analysis.emotion : "Neutre";
             
             if (data.sender_id === username) {
-                // On récupère TOUS les messages locaux en attente d'analyse
+                // On cherche l'élément le plus récent en attente
                 const pendingMessages = document.querySelectorAll(".message.sent.pending-analysis");
                 if (pendingMessages.length > 0) {
-                    // On prend le dernier de la liste (le plus récent)
                     const localMsg = pendingMessages[pendingMessages.length - 1];
                     const vibeTag = localMsg.querySelector(".vibe-tag");
                     if (vibeTag) {
@@ -86,6 +86,7 @@ document.addEventListener("DOMContentLoaded", () => {
         const text = messageInput.value.trim();
         if (text === "") return;
 
+        // Création de la bulle locale
         const messageDiv = document.createElement("div");
         messageDiv.classList.add("message", "sent", "pending-analysis");
         messageDiv.innerHTML = `${text} <span class="vibe-tag">Analyse...</span>`;
@@ -97,9 +98,10 @@ document.addEventListener("DOMContentLoaded", () => {
                 text: text,
                 recipient_id: "" 
             };
+            console.log("Envoi du payload au serveur :", payload);
             ws.send(JSON.stringify(payload));
         } else {
-            console.log("Message affiché localement. Synchronisation réseau en cours...");
+            console.log("Serveur déconnecté, affichage local uniquement.");
             const vibeTag = messageDiv.querySelector(".vibe-tag");
             if (vibeTag) vibeTag.textContent = "Hors-ligne";
         }
