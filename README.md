@@ -1,0 +1,2 @@
+# Resonuance
+Chat traduction emotion 
