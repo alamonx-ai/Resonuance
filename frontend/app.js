@@ -23,12 +23,10 @@ document.addEventListener("DOMContentLoaded", () => {
             return;
         }
 
-        // Masquer le login et afficher le chat
         loginContainer.style.display = "none";
         appContainer.style.display = "flex";
         currentUserTag.textContent = username;
 
-        // Lancer la vraie connexion WebSocket avec le pseudo choisi
         connectToServer(username);
     });
 
@@ -50,20 +48,19 @@ document.addEventListener("DOMContentLoaded", () => {
             const emotion = data.analysis && data.analysis.emotion ? data.analysis.emotion : "Neutre";
             
             if (data.sender_id === username) {
-                // SI C'EST NOTRE MESSAGE : On cherche notre bulle locale en attente et on met à jour son tag
-                const localMsg = document.querySelector(".message.sent.pending-analysis");
-                if (localMsg) {
+                // On récupère TOUS les messages locaux en attente d'analyse
+                const pendingMessages = document.querySelectorAll(".message.sent.pending-analysis");
+                if (pendingMessages.length > 0) {
+                    // On prend le dernier de la liste (le plus récent)
+                    const localMsg = pendingMessages[pendingMessages.length - 1];
                     const vibeTag = localMsg.querySelector(".vibe-tag");
                     if (vibeTag) {
                         vibeTag.textContent = emotion;
-                        // Optionnel : on peut ajouter une classe CSS selon l'émotion si tu veux changer la couleur
                         vibeTag.className = `vibe-tag ${emotion.toLowerCase()}`;
                     }
-                    // On retire la classe d'attente
                     localMsg.classList.remove("pending-analysis");
                 }
             } else {
-                // SI C'EST LE MESSAGE DE QUELQU'UN D'AUTRE : On l'affiche normalement
                 const messageDiv = document.createElement("div");
                 messageDiv.classList.add("message", "received");
                 messageDiv.innerHTML = `<strong>${data.sender_id}:</strong> ${data.text} <span class="vibe-tag ${emotion.toLowerCase()}">${emotion}</span>`;
@@ -89,14 +86,12 @@ document.addEventListener("DOMContentLoaded", () => {
         const text = messageInput.value.trim();
         if (text === "") return;
 
-        // AFFICHAGE LOCAL TEMPORAIRE : On met "Analyse..." ou "Neutre" en attendant la réponse du serveur
         const messageDiv = document.createElement("div");
-        messageDiv.classList.add("message", "sent", "pending-analysis"); // Ajout de 'pending-analysis'
+        messageDiv.classList.add("message", "sent", "pending-analysis");
         messageDiv.innerHTML = `${text} <span class="vibe-tag">Analyse...</span>`;
         chatContainer.appendChild(messageDiv);
         chatContainer.scrollTop = chatContainer.scrollHeight;
 
-        // ENVOI EN ARRIÈRE-PLAN
         if (ws && ws.readyState === WebSocket.OPEN) {
             const payload = {
                 text: text,
@@ -112,7 +107,6 @@ document.addEventListener("DOMContentLoaded", () => {
         messageInput.value = "";
     });
 
-    messageInput.value = "";
     messageInput.addEventListener("keypress", (e) => {
         if (e.key === "Enter") sendBtn.click();
     });
