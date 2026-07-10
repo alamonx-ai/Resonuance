@@ -42,7 +42,6 @@ document.addEventListener("DOMContentLoaded", () => {
 
         ws.onopen = () => {
             console.log("Connexion établie avec succès !");
-            // Optionnel : Afficher un petit message système local
             appendSystemMessage("Connexion au serveur Résonuance réussie.");
         };
 
@@ -52,14 +51,17 @@ document.addEventListener("DOMContentLoaded", () => {
             const messageDiv = document.createElement("div");
             messageDiv.classList.add("message");
 
+            // On récupère l'émotion depuis le nouvel objet "analysis" envoyé par Python
+            const emotion = data.analysis && data.analysis.emotion ? data.analysis.emotion : "Neutre";
+
             // Si le message vient de nous-mêmes
             if (data.sender_id === username) {
                 messageDiv.classList.add("sent");
-                messageDiv.innerHTML = `${data.text} <span class="vibe-tag">${data.vibe}</span>`;
+                messageDiv.innerHTML = `${data.text} <span class="vibe-tag">${emotion}</span>`;
             } else {
                 // Si ça vient d'un autre utilisateur connecté
                 messageDiv.classList.add("received");
-                messageDiv.innerHTML = `<strong>${data.sender_id}:</strong> ${data.text} <span class="vibe-tag">${data.vibe}</span>`;
+                messageDiv.innerHTML = `<strong>${data.sender_id}:</strong> ${data.text} <span class="vibe-tag">${emotion}</span>`;
             }
 
             chatContainer.appendChild(messageDiv);
@@ -85,7 +87,7 @@ document.addEventListener("DOMContentLoaded", () => {
         if (ws && ws.readyState === WebSocket.OPEN) {
             const payload = {
                 text: text,
-                recipient_id: null // Salon global
+                recipient_id: "" // Une chaîne vide évite les conflits d'aiguillage en Python
             };
             ws.send(JSON.stringify(payload));
             messageInput.value = "";
@@ -100,7 +102,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     function appendSystemMessage(text) {
         const msg = document.createElement("div");
-        msg.style.textAlignment = "center";
+        msg.style.textAlign = "center"; // Correction d'une petite erreur de syntaxe CSS ici !
         msg.style.fontSize = "0.8rem";
         msg.style.color = "#999";
         msg.style.margin = "10px 0";
