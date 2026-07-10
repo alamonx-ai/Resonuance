@@ -54,7 +54,7 @@ class ConnectionManager:
                 self.disconnect(user_id)
 
     async def broadcast(self, message: str):
-        # On utilise une liste des connexions pour éviter les bugs pendant la boucle
+        # Utilisation de list() pour éviter les erreurs de modification de dictionnaire en cours de boucle
         for user_id, connection in list(self.active_connections.items()):
             try:
                 await connection.send_text(message)
@@ -80,18 +80,26 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
     try:
         while True:
             data = await websocket.receive_text()
-            message_data = json.loads(data)
+            
+            # Sécurité décodage JSON
+            try:
+                message_data = json.loads(data)
+            except Exception:
+                continue
 
-            text = message_data.get("text")
-            recipient_id = message_data.get("recipient_id")
+            text = message_data.get("text", "").strip()
+            recipient_id = message_data.get("recipient_id", "").strip()
 
-            # On génère le timestamp actuel
+            # On ignore les messages vides
+            if not text:
+                continue
+
             current_time = datetime.utcnow()
 
-            # Structure propre pour MongoDB (avec un vrai objet datetime)
+            # 1. Payload pour MongoDB (contient l'objet datetime brut)
             db_payload = {
                 "sender_id": user_id,
-                "recipient_id": recipient_id,
+                "recipient_id": recipient_id if recipient_id else None,
                 "text": text,
                 "analysis": {
                     "emotion": "Neutre",
@@ -101,15 +109,17 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
                 "timestamp": current_time
             }
 
-            # Sauvegarde MongoDB (on le laisse injecter son _id ici, on s'en fiche)
-            await messages_collection.insert_one(db_payload)
+            # Sauvegarde MongoDB isolée pour ne pas polluer l'envoi WebSocket avec l' _id
+            try:
+                await messages_collection.insert_one(db_payload)
+            except Exception as e:
+                print(f"Erreur MongoDB: {e}")
 
-            # Structure propre au format TEXTE pour le WebSocket (évite le bug de l'ObjectId)
+            # 2. Payload propre pour le WebSocket (sans l'objet _id de MongoDB)
             ws_response = {
                 "sender_id": user_id,
-                "recipient_id": recipient_id,
+                "recipient_id": recipient_id if recipient_id else None,
                 "text": text,
-                "vibe": "Neutre",  # On garde la clé "vibe" attendue par ton app.js pour l'instant
                 "analysis": {
                     "emotion": "Neutre",
                     "need": None,
@@ -118,15 +128,15 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
                 "timestamp": current_time.isoformat()
             }
 
-            # Envoi au destinataire ou en public
             message_string = json.dumps(ws_response)
 
+            # Aiguillage du message
             if recipient_id:
-                # Privé : Destinataire + Expéditeur
+                # Salon privé
                 await manager.send_personal_message(message_string, recipient_id)
                 await manager.send_personal_message(message_string, user_id)
             else:
-                # Public : Tout le monde
+                # Salon public
                 await manager.broadcast(message_string)
 
     except WebSocketDisconnect:

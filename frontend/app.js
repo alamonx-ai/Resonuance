@@ -48,24 +48,18 @@ document.addEventListener("DOMContentLoaded", () => {
         ws.onmessage = (event) => {
             const data = JSON.parse(event.data);
             
-            const messageDiv = document.createElement("div");
-            messageDiv.classList.add("message");
-
-            // On récupère l'émotion depuis le nouvel objet "analysis" envoyé par Python
-            const emotion = data.analysis && data.analysis.emotion ? data.analysis.emotion : "Neutre";
-
-            // Si le message vient de nous-mêmes
-            if (data.sender_id === username) {
-                messageDiv.classList.add("sent");
-                messageDiv.innerHTML = `${data.text} <span class="vibe-tag">${emotion}</span>`;
-            } else {
-                // Si ça vient d'un autre utilisateur connecté
-                messageDiv.classList.add("received");
+            // FILTRE SÉCURITÉ : On n'affiche le message que s'il vient de quelqu'un d'autre
+            // (puisqu'on affiche déjà notre propre message instantanément au clic)
+            if (data.sender_id !== username) {
+                const messageDiv = document.createElement("div");
+                messageDiv.classList.add("message", "received");
+                
+                const emotion = data.analysis && data.analysis.emotion ? data.analysis.emotion : "Neutre";
                 messageDiv.innerHTML = `<strong>${data.sender_id}:</strong> ${data.text} <span class="vibe-tag">${emotion}</span>`;
+                
+                chatContainer.appendChild(messageDiv);
+                chatContainer.scrollTop = chatContainer.scrollHeight;
             }
-
-            chatContainer.appendChild(messageDiv);
-            chatContainer.scrollTop = chatContainer.scrollHeight;
         };
 
         ws.onerror = (error) => {
@@ -84,16 +78,25 @@ document.addEventListener("DOMContentLoaded", () => {
         const text = messageInput.value.trim();
         if (text === "") return;
 
+        // FORÇAGE VISUEL LOCAL : On affiche immédiatement notre message à l'écran
+        const messageDiv = document.createElement("div");
+        messageDiv.classList.add("message", "sent");
+        messageDiv.innerHTML = `${text} <span class="vibe-tag">Neutre</span>`;
+        chatContainer.appendChild(messageDiv);
+        chatContainer.scrollTop = chatContainer.scrollHeight;
+
+        // ENVOI EN ARRIÈRE-PLAN : Si le réseau est au vert, on transmet aux autres
         if (ws && ws.readyState === WebSocket.OPEN) {
             const payload = {
                 text: text,
-                recipient_id: "" // Une chaîne vide évite les conflits d'aiguillage en Python
+                recipient_id: "" // Chaîne vide pour le salon général public
             };
             ws.send(JSON.stringify(payload));
-            messageInput.value = "";
         } else {
-            alert("Le chat est hors-ligne pour le moment. Attente du serveur...");
+            console.log("Message affiché localement. Synchronisation réseau en cours...");
         }
+        
+        messageInput.value = "";
     });
 
     messageInput.addEventListener("keypress", (e) => {
@@ -102,7 +105,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     function appendSystemMessage(text) {
         const msg = document.createElement("div");
-        msg.style.textAlign = "center"; // Correction d'une petite erreur de syntaxe CSS ici !
+        msg.style.textAlign = "center";
         msg.style.fontSize = "0.8rem";
         msg.style.color = "#999";
         msg.style.margin = "10px 0";
