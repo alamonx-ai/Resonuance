@@ -1,64 +1,79 @@
 document.addEventListener("DOMContentLoaded", () => {
-    // 1. CONFIGURATION DE LA CONNEXION (Ton serveur Render)
     const BACKEND_URL = "resonuance.onrender.com"; 
-    const USER_ID = "User_" + Math.floor(Math.random() * 1000); // Génère un ID unique temporaire
+    const USER_ID = "User_" + Math.floor(Math.random() * 1000); 
     
-    // Ouverture de la connexion WebSocket en temps réel avec ton backend FastAPI
-    const ws = new WebSocket(`wss://${BACKEND_URL}/ws/${USER_ID}`);
-
+    let ws;
     const sendBtn = document.getElementById("send-btn");
     const messageInput = document.getElementById("message-input");
     const chatContainer = document.getElementById("chat-container");
 
-    // 2. ÉCOUTER LES MESSAGES EN PROVENANCE DU SERVEUR
-    ws.onmessage = (event) => {
-        const data = JSON.parse(event.data);
-        
-        // Créer une nouvelle bulle de message
+    // Fonction pour afficher un message à l'écran
+    function appendMessage(senderId, text, vibe) {
         const messageDiv = document.createElement("div");
         messageDiv.classList.add("message");
 
-        // Si c'est nous qui l'avons envoyé -> à droite (sent), sinon -> à gauche (received)
-        if (data.sender_id === USER_ID) {
+        if (senderId === USER_ID) {
             messageDiv.classList.add("sent");
-            messageDiv.innerHTML = `${data.text} <span class="vibe-tag">${data.vibe}</span>`;
+            messageDiv.innerHTML = `${text} <span class="vibe-tag">${vibe}</span>`;
         } else {
             messageDiv.classList.add("received");
-            messageDiv.innerHTML = `<strong>${data.sender_id}:</strong> ${data.text} <span class="vibe-tag">${data.vibe}</span>`;
+            messageDiv.innerHTML = `<strong>${senderId}:</strong> ${text} <span class="vibe-tag">${vibe}</span>`;
         }
 
-        // Ajouter le message à l'écran et faire défiler vers le bas
         chatContainer.appendChild(messageDiv);
         chatContainer.scrollTop = chatContainer.scrollHeight;
-    };
+    }
 
-    ws.onopen = () => {
-        console.log("Connecté au serveur de chat Résonuance !");
-    };
+    // Fonction pour initialiser la connexion WebSocket
+    function connectWebSocket() {
+        ws = new WebSocket(`wss://${BACKEND_URL}/ws/${USER_ID}`);
 
-    ws.onerror = (error) => {
-        console.error("Erreur de connexion au chat :", error);
-    };
-
-    // 3. ENVOYER UN MESSAGE AU SERVEUR QUAND ON CLIQUE SUR LE BOUTON
-    sendBtn.addEventListener("click", () => {
-        const text = messageInput.value.trim();
-        if (text === "" || ws.readyState !== WebSocket.OPEN) return;
-
-        // Structure du message attendue par le backend Python
-        const payload = {
-            text: text,
-            recipient_id: null // Envoi dans le salon public pour l'instant
+        ws.onmessage = (event) => {
+            const data = JSON.parse(event.data);
+            // Si on reçoit le message du serveur, et que c'est le nôtre, on évite de le doubler
+            // si on l'a déjà affiché en local. Pour l'instant, on laisse le serveur gérer.
+            appendMessage(data.sender_id, data.text, data.vibe);
         };
 
-        // Envoi des données converties en texte JSON
-        ws.send(JSON.stringify(payload));
+        ws.onopen = () => {
+            console.log("Connecté au serveur de chat Résonuance !");
+        };
+
+        ws.onerror = (error) => {
+            console.error("Erreur WebSocket :", error);
+        };
+
+        ws.onclose = () => {
+            console.log("Connexion fermée. Tentative de reconnexion dans 5 secondes...");
+            setTimeout(connectWebSocket, 5000); // Reconnexion automatique
+        };
+    }
+
+    // Lancer la connexion
+    connectWebSocket();
+
+    // Gestion de l'envoi
+    sendBtn.addEventListener("click", () => {
+        const text = messageInput.value.trim();
+        if (text === "") return;
+
+        // Si le WebSocket est ouvert, on envoie au serveur Python
+        if (ws && ws.readyState === WebSocket.OPEN) {
+            const payload = {
+                text: text,
+                recipient_id: null
+            };
+            ws.send(JSON.stringify(payload));
+        } else {
+            // MODE SECOURS : Si Render dort ou bug, on affiche quand même le message
+            // pour que tu puisses voir que ton bouton et ton design fonctionnent !
+            console.warn("Serveur déconnecté. Affichage en mode local.");
+            appendMessage(USER_ID, text, "Local (Hors-ligne)");
+        }
         
-        // Vider le champ de texte
         messageInput.value = "";
     });
 
-    // Permet d'envoyer le message en appuyant sur "Entrée" depuis le clavier de l'iPhone
     messageInput.addEventListener("keypress", (e) => {
         if (e.key === "Enter") {
             sendBtn.click();
