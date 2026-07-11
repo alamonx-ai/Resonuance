@@ -41,11 +41,9 @@ else:
 
 # --- MOTEUR D'ANALYSE PAR INTELLIGENCE ARTIFICIELLE ---
 async def analyze_with_ai(text: str) -> dict:
-    fallback = {"emotion": "Neutre", "need": "Non identifié", "interpretation": "Analyse indisponible"}
-    
     if not groq_client:
         print("Erreur : groq_client est à None, retour au fallback.")
-        return fallback
+        return {"emotion": "Cle_Manquante", "need": "Vérifier Render", "interpretation": "GROQ_API_KEY est introuvable"}
 
     try:
         chat_completion = await groq_client.chat.completions.create(
@@ -76,8 +74,9 @@ async def analyze_with_ai(text: str) -> dict:
         return json.loads(ai_response)
         
     except Exception as e:
+        error_msg = str(e)[:25].replace(" ", "_") # Évite les espaces problématiques dans la classe CSS
         print(f"Erreur lors de l'appel IA Groq : {e}")
-        return fallback
+        return {"emotion": f"Err_{error_msg}", "need": "IA en panne", "interpretation": "Exception levée"}
 # ------------------------------------------------------
 
 
@@ -169,7 +168,6 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
                     await manager.send_personal_message(message_string, recipient_id)
                     await manager.send_personal_message(message_string, user_id)
                 else:
-                    # Envoi global simple sans filtre d'exclusion pour éviter les pertes de paquets locaux
                     await manager.broadcast(message_string)
                     
             except Exception as e:
