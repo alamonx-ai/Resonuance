@@ -51,17 +51,18 @@ async def analyze_with_ai(text: str) -> dict:
                 {
                     "role": "system",
                     "content": (
+                        "You are a helpful assistant designed to output JSON. "
                         "Tu es l'expert psychologue du chat Résonuance. Tu analyses les messages des utilisateurs. "
-                        "Tu devez obligatoirement répondre sous la forme d'un objet JSON pur, sans markdown, sans texte autour. "
-                        "Le JSON doit suivre exactement cette structure : "
-                        '{"emotion": "Un seul mot (ex: Joie, Colère, Tristesse, Stress, Excitation, Peur, Neutre)", '
-                        '"need": "Le besoin psychologique sous-jacent en une courte phrase (ex: Besoin de reconnaissance, besoin d\'écoute)", '
-                        '"interpretation": "Une très courte phrase analysant l\'état de l\'utilisateur"}'
+                        "Tu dois obligatoirement répondre sous la forme d'un objet JSON valide. "
+                        "La réponse doit suivre exactement cette structure JSON : "
+                        '{"emotion": "Un seul mot (ex: Joie, Colere, Tristesse, Stress, Excitation, Peur, Neutre)", '
+                        '"need": "Le besoin psychologique sous-jacent en une courte phrase (ex: Besoin de reconnaissance, besoin d\'ecoute)", '
+                        '"interpretation": "Une tres courte phrase analysant l\'etat de l\'utilisateur"}'
                     )
                 },
                 {
                     "role": "user",
-                    "content": f"Analyse ce message : '{text}'"
+                    "content": f"Analyse ce message et retourne le format JSON demandé : '{text}'"
                 }
             ],
             model="llama3-8b-8192",
